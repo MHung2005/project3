@@ -1,0 +1,31 @@
+from app.models.models import (
+    Category,
+    Chapter,
+    Course,
+    Enrollment,
+    Lesson,
+    LessonProgress,
+    Question,
+    QuestionOption,
+    Quiz,
+    QuizAttempt,
+    QuizAttemptAnswer,
+    QuizQuestion,
+    User,
+)
+
+__all__ = [
+    "User",
+    "Category",
+    "Course",
+    "Chapter",
+    "Lesson",
+    "Enrollment",
+    "LessonProgress",
+    "Question",
+    "QuestionOption",
+    "Quiz",
+    "QuizQuestion",
+    "QuizAttempt",
+    "QuizAttemptAnswer",
+]
