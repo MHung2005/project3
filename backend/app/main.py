@@ -1,31 +1,29 @@
 """
-ELearning Platform – FastAPI Application Entry Point
-====================================================
-Bootstraps the FastAPI app, registers all middleware, includes all routers,
-and sets up database tables on startup.
-"""
+E-Learning Platform
 
+"""
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, logger
+
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from app.api.v1.api_router import api_router
 from app.core.config import settings
-from app.core.database import create_all_tables
+from app.core.database import SessionLocal, create_all_tables, wait_for_database
+from app.services.auth_service import seed_first_admin
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Run startup and shutdown logic."""
-    # Startup: create tables if they don't exist
+    wait_for_database()
     create_all_tables()
-    print(f"✅  Database tables ensured. App '{settings.APP_NAME}' is ready.")
+    with SessionLocal() as db:
+        seed_first_admin(db)
     yield
-    # Shutdown: clean up resources (if any)
-    print("🛑  Application shutting down.")
 
 
 # ── Application Factory ───────────────────────────────────────────────────────
@@ -43,10 +41,7 @@ Hệ thống API hỗ trợ:
 ### Xác thực
 Sử dụng `Bearer <access_token>` trong header `Authorization`.
 """,
-    contact={
-        "name": "Lê Mạnh Hùng – MSSV: 20235096",
-        "email": "hung@example.com",
-    },
+    contact={"name": "Lê Mạnh Hùng – MSSV: 20235096"},
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -62,36 +57,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Global Exception Handler ──────────────────────────────────────────────────
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    if settings.DEBUG:
-        import traceback
-        traceback.print_exc()
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={
-            "success": False,
-            "message": "Lỗi máy chủ nội bộ. Vui lòng thử lại sau.",
-            "data": None,
-            "error": str(exc) if settings.DEBUG else "Internal Server Error",
-        },
-    )
-
-# ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(api_router, prefix="/api/v1")
-
-
-# ── Health Check ──────────────────────────────────────────────────────────────
-@app.get("/health", tags=["Health"], summary="Kiểm tra trạng thái hệ thống")
-def health_check():
-    return {
-        "status": "healthy",
-        "app": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-    }
-
-
-@app.get("/", tags=["Root"], include_in_schema=False)
-def root():
-    return {"message": f"Welcome to {settings.APP_NAME} API. Visit /docs for documentation."}

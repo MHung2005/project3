@@ -1,12 +1,10 @@
 """Service – Category business logic."""
-from typing import Optional
-
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.models import Category
 from app.repositories.category_repository import CategoryRepository
 from app.schemas.category import CategoryCreate, CategoryUpdate
+from app.services.permissions import bad_request, not_found
 
 
 class CategoryService:
@@ -19,34 +17,29 @@ class CategoryService:
     def get_by_id(self, category_id: int) -> Category:
         cat = self.repo.get_by_id(category_id)
         if not cat:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Danh mục không tồn tại.")
+            raise not_found("Danh mục không tồn tại.")
         return cat
 
+    def _ensure_unique(self, name: str | None, slug: str | None, category_id: int | None = None) -> None:
+        """Name and slug must not belong to another category."""
+        existing = name and self.repo.get_by_name(name)
+        if existing and existing.id != category_id:
+            raise bad_request("Tên danh mục đã tồn tại.")
+        existing = slug and self.repo.get_by_slug(slug)
+        if existing and existing.id != category_id:
+            raise bad_request("Slug đã được sử dụng.")
+
     def create(self, data: CategoryCreate) -> Category:
-        if self.repo.get_by_name(data.name):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tên danh mục đã tồn tại.")
-        if self.repo.get_by_slug(data.slug):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slug đã được sử dụng.")
+        self._ensure_unique(data.name, data.slug)
         return self.repo.create(name=data.name, slug=data.slug, description=data.description)
 
     def update(self, category_id: int, data: CategoryUpdate) -> Category:
         cat = self.get_by_id(category_id)
-        update_data = data.model_dump(exclude_none=True)
-        if "name" in update_data:
-            existing = self.repo.get_by_name(update_data["name"])
-            if existing and existing.id != category_id:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tên danh mục đã tồn tại.")
-        if "slug" in update_data:
-            existing = self.repo.get_by_slug(update_data["slug"])
-            if existing and existing.id != category_id:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slug đã được sử dụng.")
-        return self.repo.update(cat, **update_data)
+        self._ensure_unique(data.name, data.slug, category_id)
+        return self.repo.update(cat, **data.model_dump(exclude_none=True))
 
     def delete(self, category_id: int) -> None:
         cat = self.get_by_id(category_id)
         if self.repo.has_courses(category_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Không thể xóa danh mục đang có khóa học phụ thuộc.",
-            )
+            raise bad_request("Không thể xóa danh mục đang có khóa học phụ thuộc.")
         self.repo.delete(cat)

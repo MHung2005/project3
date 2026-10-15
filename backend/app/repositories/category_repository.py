@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.models import Category
+from app.models.models import Category, Course
 
 
 class CategoryRepository:
@@ -14,7 +14,7 @@ class CategoryRepository:
         return self.db.query(Category).order_by(Category.name).all()
 
     def get_by_id(self, category_id: int) -> Optional[Category]:
-        return self.db.query(Category).filter(Category.id == category_id).first()
+        return self.db.get(Category, category_id)
 
     def get_by_slug(self, slug: str) -> Optional[Category]:
         return self.db.query(Category).filter(Category.slug == slug).first()
@@ -42,6 +42,4 @@ class CategoryRepository:
         self.db.commit()
 
     def has_courses(self, category_id: int) -> bool:
-        from app.models.models import Course
-        count = self.db.query(Course).filter(Course.category_id == category_id).count()
-        return count > 0
+        return self.db.query(Course.id).filter(Course.category_id == category_id).first() is not None

@@ -1,0 +1,59 @@
+# Deployment per SDD §7.2. The frontend service is added once ./frontend exists.
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: elearning-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=YourStrongPassword!2026
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - elearning-net
+
+  minio:
+    image: minio/minio:latest
+    container_name: elearning-minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=miniopassword2026
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - elearning-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: elearning-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override host-based values with in-network service names
+      - DATABASE_URL=mssql+pyodbc://sa:YourStrongPassword!2026@sqlserver:1433/elearning_db?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_PUBLIC_URL=http://localhost:9000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - sqlserver
+      - minio
+    restart: unless-stopped
+    networks:
+      - elearning-net
+
+volumes:
+  sqlserver_data:
+  minio_data:
+
+networks:
+  elearning-net:
+    driver: bridge

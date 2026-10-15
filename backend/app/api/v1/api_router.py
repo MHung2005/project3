@@ -1,14 +1,16 @@
 """API v1 – Main router aggregating all endpoint routers."""
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, categories, courses, progress, quizzes, storage
+from app.api.v1.endpoints import auth, categories, courses, lessons, progress, quizzes, storage, users
 
 api_router = APIRouter()
 
-# Include all sub-routers with /api/v1 prefix (prefix set in main.py)
-api_router.include_router(auth.router, tags=["Auth & Users"])
+# All sub-routers are mounted under /api/v1 (prefix set in main.py)
+api_router.include_router(auth.router, tags=["Auth"])
+api_router.include_router(users.router, tags=["Admin – Users"])
 api_router.include_router(categories.router, tags=["Categories"])
-api_router.include_router(courses.router, tags=["Courses & Content"])
+api_router.include_router(courses.router, tags=["Courses & Chapters"])
+api_router.include_router(lessons.router, tags=["Lessons"])
 api_router.include_router(progress.router, tags=["Enrollment & Progress"])
 api_router.include_router(quizzes.router, tags=["Questions & Quizzes"])
 api_router.include_router(storage.router, tags=["Storage"])

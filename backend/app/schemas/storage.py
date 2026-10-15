@@ -7,3 +7,4 @@ class FileUploadResponse(BaseModel):
     filename: str
     file_size: int
     bucket: str
+    object_name: str

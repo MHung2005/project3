@@ -1,10 +1,10 @@
 """Repository – Course, Chapter, Lesson data access."""
-import math
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.models import Chapter, Course, Lesson
+from app.models.models import Chapter, Course, Enrollment, Lesson, Quiz
 
 
 class CourseRepository:
@@ -13,7 +13,7 @@ class CourseRepository:
 
     # ── Course ────────────────────────────────────────────────────────────────
     def get_by_id(self, course_id: int) -> Optional[Course]:
-        return self.db.query(Course).filter(Course.id == course_id).first()
+        return self.db.get(Course, course_id)
 
     def get_detail(self, course_id: int) -> Optional[Course]:
         return (
@@ -22,37 +22,41 @@ class CourseRepository:
                 selectinload(Course.instructor),
                 selectinload(Course.category),
                 selectinload(Course.chapters).selectinload(Chapter.lessons),
+                selectinload(Course.quizzes),
             )
             .filter(Course.id == course_id)
             .first()
         )
 
-    def get_published_paginated(
+    def get_paginated(
         self,
         page: int = 1,
         limit: int = 12,
+        status: Optional[str] = None,
         category_id: Optional[int] = None,
+        instructor_id: Optional[int] = None,
         search: Optional[str] = None,
     ) -> tuple[list[Course], int]:
-        query = self.db.query(Course).filter(Course.status == "PUBLISHED")
+        query = self.db.query(Course)
+        if status:
+            query = query.filter(Course.status == status)
         if category_id:
             query = query.filter(Course.category_id == category_id)
+        if instructor_id:
+            query = query.filter(Course.instructor_id == instructor_id)
         if search:
             query = query.filter(Course.title.ilike(f"%{search}%"))
         total = query.count()
-        items = query.order_by(Course.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+        # Pending courses are reviewed oldest-first, everything else newest-first
+        order = Course.updated_at.asc() if status == "PENDING" else Course.created_at.desc()
+        items = (
+            query.options(selectinload(Course.instructor), selectinload(Course.category))
+            .order_by(order, Course.id.desc())
+            .offset((page - 1) * limit)
+            .limit(limit)
+            .all()
+        )
         return items, total
-
-    def get_by_instructor_paginated(
-        self, instructor_id: int, page: int = 1, limit: int = 12
-    ) -> tuple[list[Course], int]:
-        query = self.db.query(Course).filter(Course.instructor_id == instructor_id)
-        total = query.count()
-        items = query.order_by(Course.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
-        return items, total
-
-    def get_pending(self) -> list[Course]:
-        return self.db.query(Course).filter(Course.status == "PENDING").order_by(Course.created_at.asc()).all()
 
     def create(self, instructor_id: int, category_id: int, title: str, **kwargs) -> Course:
         course = Course(instructor_id=instructor_id, category_id=category_id, title=title, **kwargs)
@@ -69,6 +73,10 @@ class CourseRepository:
         self.db.refresh(course)
         return course
 
+    def delete(self, course: Course) -> None:
+        self.db.delete(course)
+        self.db.commit()
+
     def count_lessons(self, course_id: int) -> int:
         return (
             self.db.query(Lesson)
@@ -77,13 +85,42 @@ class CourseRepository:
             .count()
         )
 
+    def get_lesson_ids(self, course_id: int) -> list[int]:
+        rows = (
+            self.db.query(Lesson.id)
+            .join(Chapter, Lesson.chapter_id == Chapter.id)
+            .filter(Chapter.course_id == course_id)
+            .order_by(Chapter.order_index, Lesson.order_index, Lesson.id)
+            .all()
+        )
+        return [r[0] for r in rows]
+
+    def count_enrollments(self, course_id: int) -> int:
+        return self.db.query(func.count(Enrollment.id)).filter(Enrollment.course_id == course_id).scalar() or 0
+
+    def has_enrollments(self, course_id: int) -> bool:
+        return self.db.query(Enrollment.id).filter(Enrollment.course_id == course_id).first() is not None
+
 
 class ChapterRepository:
     def __init__(self, db: Session):
         self.db = db
 
     def get_by_id(self, chapter_id: int) -> Optional[Chapter]:
-        return self.db.query(Chapter).filter(Chapter.id == chapter_id).first()
+        return self.db.get(Chapter, chapter_id)
+
+    def get_by_course(self, course_id: int) -> list[Chapter]:
+        return (
+            self.db.query(Chapter)
+            .options(selectinload(Chapter.lessons))
+            .filter(Chapter.course_id == course_id)
+            .order_by(Chapter.order_index, Chapter.id)
+            .all()
+        )
+
+    def next_order_index(self, course_id: int) -> int:
+        current = self.db.query(func.max(Chapter.order_index)).filter(Chapter.course_id == course_id).scalar()
+        return (current or 0) + 1
 
     def create(self, course_id: int, title: str, order_index: int = 1) -> Chapter:
         chapter = Chapter(course_id=course_id, title=title, order_index=order_index)
@@ -104,13 +141,26 @@ class ChapterRepository:
         self.db.delete(chapter)
         self.db.commit()
 
+    def has_quizzes(self, chapter_id: int) -> bool:
+        return self.db.query(Quiz.id).filter(Quiz.chapter_id == chapter_id).first() is not None
+
 
 class LessonRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_by_id(self, lesson_id: int) -> Optional[Lesson]:
-        return self.db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    def get_with_course(self, lesson_id: int) -> Optional[Lesson]:
+        """Load a lesson together with its chapter and course (for permission checks)."""
+        return (
+            self.db.query(Lesson)
+            .options(selectinload(Lesson.chapter).selectinload(Chapter.course))
+            .filter(Lesson.id == lesson_id)
+            .first()
+        )
+
+    def next_order_index(self, chapter_id: int) -> int:
+        current = self.db.query(func.max(Lesson.order_index)).filter(Lesson.chapter_id == chapter_id).scalar()
+        return (current or 0) + 1
 
     def create(self, chapter_id: int, **kwargs) -> Lesson:
         lesson = Lesson(chapter_id=chapter_id, **kwargs)

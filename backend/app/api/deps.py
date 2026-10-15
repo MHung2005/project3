@@ -1,7 +1,7 @@
 """FastAPI Dependencies – DB session, JWT authentication, RBAC role guards."""
-from typing import Annotated
+from typing import Annotated, Optional
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
@@ -52,7 +52,21 @@ def get_current_user(
     return _get_user_from_token(credentials.credentials, db)
 
 
+def get_optional_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    db: DBSession,
+) -> Optional[User]:
+    """Dependency for public endpoints that personalise the response when a valid token is sent."""
+    if credentials is None:
+        return None
+    try:
+        return _get_user_from_token(credentials.credentials, db)
+    except HTTPException:
+        return None
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
+OptionalUser = Annotated[Optional[User], Depends(get_optional_user)]
 
 
 def require_role(*roles: str):

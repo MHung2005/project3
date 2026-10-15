@@ -4,13 +4,15 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.schemas.common import PaginatedResponse
 
-# ── Common Response Envelope ──────────────────────────────────────────────────
-class APIResponse(BaseModel):
-    success: bool = True
-    message: str = "Thao tác thành công"
-    data: Optional[object] = None
-    error: Optional[str] = None
+
+def _validate_password_strength(v: str) -> str:
+    if not any(c.isupper() for c in v):
+        raise ValueError("Mật khẩu phải có ít nhất 1 chữ hoa")
+    if not any(c.isdigit() for c in v):
+        raise ValueError("Mật khẩu phải có ít nhất 1 chữ số")
+    return v
 
 
 # ── User Schemas ──────────────────────────────────────────────────────────────
@@ -20,16 +22,17 @@ class UserBase(BaseModel):
 
 
 class UserRegisterRequest(UserBase):
-    password: str = Field(..., min_length=6, max_length=100)
+    password: str = Field(..., min_length=6, max_length=72)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.lower()
 
     @field_validator("password")
     @classmethod
     def password_strength(cls, v: str) -> str:
-        if not any(c.isupper() for c in v):
-            raise ValueError("Mật khẩu phải có ít nhất 1 chữ hoa")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Mật khẩu phải có ít nhất 1 chữ số")
-        return v
+        return _validate_password_strength(v)
 
 
 class UserLoginRequest(BaseModel):
@@ -54,30 +57,33 @@ class UserBriefResponse(BaseModel):
     email: str
     full_name: str
     role: str
+    avatar_url: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
 
-class TokenData(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserBriefResponse
+class InstructorBriefResponse(BaseModel):
+    """Public instructor info shown on course pages (no email)."""
+    id: int
+    full_name: str
+    avatar_url: Optional[str] = None
 
-
-class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserBriefResponse
+    model_config = {"from_attributes": True}
 
 
 class UpdateProfileRequest(BaseModel):
     full_name: Optional[str] = Field(None, min_length=2, max_length=150)
-    avatar_url: Optional[str] = None
+    avatar_url: Optional[str] = Field(None, max_length=500)
 
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=6, max_length=72)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        return _validate_password_strength(v)
 
 
 class UpdateUserStatusRequest(BaseModel):
@@ -88,9 +94,4 @@ class UpdateUserRoleRequest(BaseModel):
     role: str = Field(..., pattern="^(STUDENT|INSTRUCTOR|ADMIN)$")
 
 
-class UserListResponse(BaseModel):
-    items: list[UserResponse]
-    total: int
-    page: int
-    limit: int
-    pages: int
+UserListResponse = PaginatedResponse[UserResponse]
