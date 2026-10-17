@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.models import Chapter, Course, Enrollment, Lesson, Quiz
+from app.models import Chapter, Course, Enrollment, Lesson, Quiz
 
 
 class CourseRepository:

@@ -1,4 +1,4 @@
-"""API Router – Categories (SDD §5.3)."""
+"""API Router – Categories"""
 from fastapi import APIRouter, status
 
 from app.api.deps import DBSession, RequireAdmin

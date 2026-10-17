@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     VIDEO_COMPLETION_THRESHOLD: float = 0.8  # >= 80% of duration
     QUIZ_SUBMIT_GRACE_SECONDS: int = 60  # network latency tolerance after time is up
 
-    # CORS – a JSON list in the environment, e.g. ["http://localhost:3000"]
+    # CORS 
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 
 

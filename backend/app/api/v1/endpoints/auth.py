@@ -1,4 +1,4 @@
-"""API Router – Authentication & personal profile (SDD §5.2)."""
+"""API Router – Authentication & personal profile."""
 from typing import Optional
 
 from fastapi import APIRouter, Cookie, HTTPException, Response, status
@@ -19,7 +19,7 @@ from app.services.auth_service import AuthService
 router = APIRouter(prefix="/auth")
 
 REFRESH_COOKIE = "refresh_token"
-REFRESH_COOKIE_PATH = "/api/v1/auth"  # cookie is only sent to auth endpoints
+REFRESH_COOKIE_PATH = "/api/v1/auth" 
 
 
 def _set_refresh_cookie(response: Response, token: str) -> None:

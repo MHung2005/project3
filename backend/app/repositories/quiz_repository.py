@@ -6,7 +6,7 @@ from sqlalchemy import case, func, true
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.utils import utc_now
-from app.models.models import (
+from app.models import (
     Question,
     QuestionOption,
     Quiz,

@@ -1,21 +1,9 @@
-"""Shared access checks and HTTP error helpers for the service layer."""
-from fastapi import HTTPException, status
+"""Shared access checks for the service layer."""
 from sqlalchemy.orm import Session
 
-from app.models.models import Course, User
+from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
+from app.models import Course, User
 from app.repositories.course_repository import CourseRepository
-
-
-def not_found(detail: str) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-
-
-def bad_request(detail: str) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-
-
-def forbidden(detail: str) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 def is_admin(user: User | None) -> bool:
@@ -29,19 +17,19 @@ def can_manage_course(user: User | None, course: Course) -> bool:
 
 def ensure_can_manage_course(user: User, course: Course, detail: str = "Bạn không có quyền chỉnh sửa khóa học này.") -> None:
     if not can_manage_course(user, course):
-        raise forbidden(detail)
+        raise ForbiddenError(detail)
 
 
 def ensure_course_editable(course: Course) -> None:
     """Content is frozen while an admin is reviewing the course."""
     if course.status == "PENDING":
-        raise bad_request("Khóa học đang chờ phê duyệt, không thể chỉnh sửa nội dung.")
+        raise BadRequestError("Khóa học đang chờ phê duyệt, không thể chỉnh sửa nội dung.")
 
 
 def get_course_or_404(db: Session, course_id: int) -> Course:
     course = CourseRepository(db).get_by_id(course_id)
     if not course:
-        raise not_found("Khóa học không tồn tại.")
+        raise NotFoundError("Khóa học không tồn tại.")
     return course
 
 

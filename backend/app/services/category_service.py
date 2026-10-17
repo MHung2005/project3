@@ -1,10 +1,10 @@
 """Service – Category business logic."""
 from sqlalchemy.orm import Session
 
-from app.models.models import Category
+from app.models import Category
 from app.repositories.category_repository import CategoryRepository
 from app.schemas.category import CategoryCreate, CategoryUpdate
-from app.services.permissions import bad_request, not_found
+from app.core.exceptions import BadRequestError, NotFoundError
 
 
 class CategoryService:
@@ -17,17 +17,17 @@ class CategoryService:
     def get_by_id(self, category_id: int) -> Category:
         cat = self.repo.get_by_id(category_id)
         if not cat:
-            raise not_found("Danh mục không tồn tại.")
+            raise NotFoundError("Danh mục không tồn tại.")
         return cat
 
     def _ensure_unique(self, name: str | None, slug: str | None, category_id: int | None = None) -> None:
         """Name and slug must not belong to another category."""
         existing = name and self.repo.get_by_name(name)
         if existing and existing.id != category_id:
-            raise bad_request("Tên danh mục đã tồn tại.")
+            raise BadRequestError("Tên danh mục đã tồn tại.")
         existing = slug and self.repo.get_by_slug(slug)
         if existing and existing.id != category_id:
-            raise bad_request("Slug đã được sử dụng.")
+            raise BadRequestError("Slug đã được sử dụng.")
 
     def create(self, data: CategoryCreate) -> Category:
         self._ensure_unique(data.name, data.slug)
@@ -41,5 +41,5 @@ class CategoryService:
     def delete(self, category_id: int) -> None:
         cat = self.get_by_id(category_id)
         if self.repo.has_courses(category_id):
-            raise bad_request("Không thể xóa danh mục đang có khóa học phụ thuộc.")
+            raise BadRequestError("Không thể xóa danh mục đang có khóa học phụ thuộc.")
         self.repo.delete(cat)

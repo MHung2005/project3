@@ -18,7 +18,6 @@ from app.schemas.course import (
 )
 from app.schemas.progress import EnrollmentResponse
 from app.services.course_service import ChapterService, CourseService
-from app.services.permissions import get_manageable_course
 
 router = APIRouter()
 
@@ -64,8 +63,7 @@ def create_course(data: CourseCreate, db: DBSession, current_user: RequireInstru
 
 @router.get("/instructor/courses/{course_id}", summary="[Instructor] Chi tiết khóa học của tôi (kể cả bản nháp)")
 def get_my_course_detail(course_id: int, db: DBSession, current_user: RequireInstructor):
-    get_manageable_course(db, course_id, current_user)
-    return APIResponse(data=CourseService(db).get_detail(course_id, current_user))
+    return APIResponse(data=CourseService(db).get_manageable_detail(course_id, current_user))
 
 
 @router.put("/instructor/courses/{course_id}", summary="[Instructor] Cập nhật khóa học")

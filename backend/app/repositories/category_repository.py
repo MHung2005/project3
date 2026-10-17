@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.models import Category, Course
+from app.models import Category, Course
 
 
 class CategoryRepository:

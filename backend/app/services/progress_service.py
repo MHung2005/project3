@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.utils import utc_now
-from app.models.models import Enrollment, Lesson, QuizAttempt, User
+from app.models import Enrollment, Lesson, QuizAttempt, User
 from app.repositories.course_repository import CourseRepository, LessonRepository
 from app.repositories.progress_repository import EnrollmentRepository, LessonProgressRepository
 from app.repositories.quiz_repository import QuizAttemptRepository, QuizRepository
@@ -18,7 +18,8 @@ from app.schemas.progress import (
     QuizProgressState,
     SaveLessonPositionRequest,
 )
-from app.services.permissions import bad_request, forbidden, get_course_or_404, not_found
+from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
+from app.services.permissions import get_course_or_404
 
 
 def summarize_attempts(attempts: list[QuizAttempt]) -> dict:
@@ -82,11 +83,11 @@ class EnrollmentService:
     def enroll(self, user: User, course_id: int) -> Enrollment:
         course = get_course_or_404(self.db, course_id)
         if course.status != "PUBLISHED":
-            raise bad_request("Chỉ có thể đăng ký các khóa học đã xuất bản.")
+            raise BadRequestError("Chỉ có thể đăng ký các khóa học đã xuất bản.")
         if course.instructor_id == user.id:
-            raise bad_request("Bạn không thể đăng ký khóa học do chính mình giảng dạy.")
+            raise BadRequestError("Bạn không thể đăng ký khóa học do chính mình giảng dạy.")
         if self.enrollment_repo.get_by_user_and_course(user.id, course_id):
-            raise bad_request("Bạn đã đăng ký khóa học này rồi.")
+            raise BadRequestError("Bạn đã đăng ký khóa học này rồi.")
         return self.enrollment_repo.create(user_id=user.id, course_id=course_id)
 
     def get_my_courses(self, user_id: int, status_filter: str | None = None) -> list[MyCourseResponse]:
@@ -102,7 +103,7 @@ class EnrollmentService:
     def get_course_progress(self, user_id: int, course_id: int) -> CourseProgressResponse:
         enrollment = self.enrollment_repo.get_by_user_and_course(user_id, course_id)
         if not enrollment:
-            raise forbidden("Bạn chưa đăng ký khóa học này.")
+            raise ForbiddenError("Bạn chưa đăng ký khóa học này.")
         enrollment = self.calculator.recalculate(enrollment)
 
         records = {p.lesson_id: p for p in self.progress_repo.get_all_for_enrollment(enrollment.id)}
@@ -139,10 +140,10 @@ class EnrollmentService:
     def _get_lesson_and_enrollment(self, user_id: int, lesson_id: int) -> tuple[Lesson, Enrollment]:
         lesson = self.lesson_repo.get_with_course(lesson_id)
         if not lesson:
-            raise not_found("Bài học không tồn tại.")
+            raise NotFoundError("Bài học không tồn tại.")
         enrollment = self.enrollment_repo.get_by_user_and_course(user_id, lesson.chapter.course_id)
         if not enrollment:
-            raise forbidden("Bạn chưa đăng ký khóa học chứa bài học này.")
+            raise ForbiddenError("Bạn chưa đăng ký khóa học chứa bài học này.")
         return lesson, enrollment
 
     def get_lesson_progress(self, user_id: int, lesson_id: int) -> LessonProgressState:
@@ -177,7 +178,7 @@ class EnrollmentService:
         if lesson.lesson_type == "VIDEO" and lesson.duration_seconds > 0:
             required = lesson.duration_seconds * settings.VIDEO_COMPLETION_THRESHOLD
             if data.last_watched_second < required:
-                raise bad_request(
+                raise BadRequestError(
                     f"Cần xem tối thiểu {int(settings.VIDEO_COMPLETION_THRESHOLD * 100)}% thời lượng video để hoàn thành bài học."
                 )
 

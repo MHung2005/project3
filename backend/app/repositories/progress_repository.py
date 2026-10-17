@@ -5,7 +5,7 @@ from sqlalchemy import func, true
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.utils import utc_now
-from app.models.models import Course, Enrollment, LessonProgress
+from app.models import Course, Enrollment, LessonProgress
 
 
 class EnrollmentRepository:

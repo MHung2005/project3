@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import false, true
 from sqlalchemy.orm import Session
 
-from app.models.models import User
+from app.models import User
 
 
 class UserRepository:

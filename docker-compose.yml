@@ -15,7 +15,7 @@ services:
       - elearning-net
 
   minio:
-    image: minio/minio:latest
+    image: pgsty/minio:latest   # thay cho minio/minio:latest
     container_name: elearning-minio
     command: server /data --console-address ":9001"
     environment:

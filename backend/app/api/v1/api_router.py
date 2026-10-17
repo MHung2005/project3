@@ -5,7 +5,6 @@ from app.api.v1.endpoints import auth, categories, courses, lessons, progress, q
 
 api_router = APIRouter()
 
-# All sub-routers are mounted under /api/v1 (prefix set in main.py)
 api_router.include_router(auth.router, tags=["Auth"])
 api_router.include_router(users.router, tags=["Admin – Users"])
 api_router.include_router(categories.router, tags=["Categories"])

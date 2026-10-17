@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from minio import Minio
 
 from app.core.config import settings
+from app.core.exceptions import BadRequestError, ServiceUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ PUBLIC_BUCKETS = {settings.MINIO_BUCKET_THUMBNAILS, settings.MINIO_BUCKET_AVATAR
 MAX_FILE_SIZE = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 
-class StorageError(Exception):
+class StorageError(ServiceUnavailableError):
     """Raised when MinIO is unreachable or rejects an operation."""
 
 
@@ -110,20 +111,20 @@ class StorageService:
     # ── Validation ────────────────────────────────────────────────────────────
     @staticmethod
     def validate(bucket: str, content_type: str, filename: str, size: int) -> str:
-        """Validate a file; returns its lowercase extension. Raises ValueError."""
+        """Validate a file; returns its lowercase extension. Raises BadRequestError."""
         if bucket not in ALLOWED_TYPES:
-            raise ValueError(f"Bucket không hợp lệ. Chỉ chấp nhận: {', '.join(sorted(ALLOWED_TYPES))}")
+            raise BadRequestError(f"Bucket không hợp lệ. Chỉ chấp nhận: {', '.join(sorted(ALLOWED_TYPES))}")
         if size <= 0:
-            raise ValueError("Tệp rỗng.")
+            raise BadRequestError("Tệp rỗng.")
         if size > MAX_FILE_SIZE:
-            raise ValueError(f"Tệp quá lớn. Giới hạn {settings.MAX_UPLOAD_SIZE_MB} MB.")
+            raise BadRequestError(f"Tệp quá lớn. Giới hạn {settings.MAX_UPLOAD_SIZE_MB} MB.")
         ext = os.path.splitext(filename)[1].lstrip(".").lower()
         if ext not in ALLOWED_EXTENSIONS[bucket]:
-            raise ValueError(
+            raise BadRequestError(
                 f"Định dạng tệp không được phép. Chấp nhận: {', '.join(sorted(ALLOWED_EXTENSIONS[bucket]))}"
             )
         if content_type not in ALLOWED_TYPES[bucket] and content_type != "application/octet-stream":
-            raise ValueError(f"Kiểu nội dung không được phép: {content_type}")
+            raise BadRequestError(f"Kiểu nội dung không được phép: {content_type}")
         return ext
 
     # ── Operations ────────────────────────────────────────────────────────────

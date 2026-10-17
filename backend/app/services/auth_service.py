@@ -2,11 +2,11 @@
 import logging
 from typing import Optional
 
-from fastapi import HTTPException, status
 from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.exceptions import BadRequestError, NotFoundError, UnauthorizedError
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -14,7 +14,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.models.models import User
+from app.models import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import (
     ChangePasswordRequest,
@@ -23,13 +23,8 @@ from app.schemas.user import (
     UserRegisterRequest,
     UserResponse,
 )
-from app.services.permissions import bad_request, not_found
 
 logger = logging.getLogger(__name__)
-
-
-def _unauthorized(detail: str) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
 
 
 def _token_payload(user: User) -> dict:
@@ -42,7 +37,7 @@ class AuthService:
 
     def register(self, data: UserRegisterRequest) -> User:
         if self.repo.get_by_email(data.email):
-            raise bad_request("Email đã được sử dụng. Vui lòng chọn email khác.")
+            raise BadRequestError("Email đã được sử dụng. Vui lòng chọn email khác.")
         return self.repo.create(
             email=data.email,
             hashed_password=hash_password(data.password),
@@ -53,9 +48,9 @@ class AuthService:
     def login(self, email: str, password: str) -> dict:
         user = self.repo.get_by_email(email)
         if not user or not verify_password(password, user.hashed_password):
-            raise _unauthorized("Email hoặc mật khẩu không chính xác.")
+            raise UnauthorizedError("Email hoặc mật khẩu không chính xác.")
         if not user.is_active:
-            raise _unauthorized("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.")
+            raise UnauthorizedError("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.")
         payload = _token_payload(user)
         return {
             "access_token": create_access_token(payload),
@@ -68,13 +63,13 @@ class AuthService:
 
     def change_password(self, user: User, data: ChangePasswordRequest) -> None:
         if not verify_password(data.current_password, user.hashed_password):
-            raise bad_request("Mật khẩu hiện tại không chính xác.")
+            raise BadRequestError("Mật khẩu hiện tại không chính xác.")
         if data.current_password == data.new_password:
-            raise bad_request("Mật khẩu mới phải khác mật khẩu hiện tại.")
+            raise BadRequestError("Mật khẩu mới phải khác mật khẩu hiện tại.")
         self.repo.update(user, hashed_password=hash_password(data.new_password))
 
     def refresh_access_token(self, refresh_token: str) -> str:
-        invalid = _unauthorized("Refresh token không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.")
+        invalid = UnauthorizedError("Refresh token không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.")
         try:
             payload = decode_token(refresh_token)
             user_id = int(payload["sub"])
@@ -84,9 +79,27 @@ class AuthService:
             raise invalid
         user = self.repo.get_by_id(user_id)
         if not user or not user.is_active:
-            raise _unauthorized("Tài khoản không hợp lệ hoặc đã bị khóa.")
+            raise UnauthorizedError("Tài khoản không hợp lệ hoặc đã bị khóa.")
         # Role may have changed since login – always issue the token from current DB state
         return create_access_token(_token_payload(user))
+
+    def authenticate_access_token(self, token: str) -> User:
+        """Return the active user an access token belongs to, raising 401 on any failure."""
+        invalid = UnauthorizedError("Token không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.")
+        try:
+            payload = decode_token(token)
+            user_id = int(payload["sub"])
+        except (JWTError, KeyError, ValueError):
+            raise invalid
+        if payload.get("type") != "access":
+            raise invalid
+        user = self.repo.get_by_id(user_id)
+        if user is None or not user.is_active:
+            raise invalid
+        return user
+
+    def update_avatar(self, user: User, avatar_url: str) -> User:
+        return self.repo.update(user, avatar_url=avatar_url)
 
 
 class AdminUserService:
@@ -109,19 +122,19 @@ class AdminUserService:
     def get_user(self, user_id: int) -> User:
         user = self.repo.get_by_id(user_id)
         if not user:
-            raise not_found("Người dùng không tồn tại.")
+            raise NotFoundError("Người dùng không tồn tại.")
         return user
 
     def update_status(self, user_id: int, is_active: bool, current_admin: User) -> User:
         user = self.get_user(user_id)
         if user.id == current_admin.id and not is_active:
-            raise bad_request("Bạn không thể tự khóa tài khoản của mình.")
+            raise BadRequestError("Bạn không thể tự khóa tài khoản của mình.")
         return self.repo.update(user, is_active=is_active)
 
     def update_role(self, user_id: int, role: str, current_admin: User) -> User:
         user = self.get_user(user_id)
         if user.id == current_admin.id and role != "ADMIN":
-            raise bad_request("Bạn không thể tự hạ quyền quản trị của chính mình.")
+            raise BadRequestError("Bạn không thể tự hạ quyền quản trị của chính mình.")
         return self.repo.update(user, role=role)
 
 

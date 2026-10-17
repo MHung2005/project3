@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.models import Chapter, Course, Enrollment, Lesson, User
+from app.models import Chapter, Course, Enrollment, Lesson, User
 from app.repositories.category_repository import CategoryRepository
 from app.repositories.course_repository import ChapterRepository, CourseRepository, LessonRepository
 from app.repositories.progress_repository import EnrollmentRepository, LessonProgressRepository
@@ -26,15 +26,13 @@ from app.schemas.course import (
     validate_lesson_content,
 )
 from app.schemas.progress import StudentProgressInfo
+from app.core.exceptions import BadRequestError, ForbiddenError, NotFoundError
 from app.services.permissions import (
-    bad_request,
     can_manage_course,
     ensure_can_manage_course,
     ensure_course_editable,
-    forbidden,
     get_course_or_404,
     get_manageable_course,
-    not_found,
 )
 from app.services.progress_service import ProgressCalculator
 from app.services.storage_service import storage_service
@@ -61,7 +59,7 @@ class CourseService:
 
     def _ensure_category(self, category_id: int) -> None:
         if not CategoryRepository(self.db).get_by_id(category_id):
-            raise bad_request("Danh mục không tồn tại.")
+            raise BadRequestError("Danh mục không tồn tại.")
 
     # ── Public ────────────────────────────────────────────────────────────────
     def get_published(self, page: int, limit: int, category_id: Optional[int], search: Optional[str]) -> CourseListResponse:
@@ -75,7 +73,7 @@ class CourseService:
         course = self.repo.get_detail(course_id)
         manages = course is not None and can_manage_course(viewer, course)
         if not course or (course.status != "PUBLISHED" and not manages):
-            raise not_found("Khóa học không tồn tại.")
+            raise NotFoundError("Khóa học không tồn tại.")
 
         is_enrolled = bool(viewer) and self.enrollment_repo.get_by_user_and_course(viewer.id, course.id) is not None
         full_access = manages or is_enrolled
@@ -100,6 +98,11 @@ class CourseService:
         )
 
     # ── Instructor ────────────────────────────────────────────────────────────
+    def get_manageable_detail(self, course_id: int, user: User) -> CourseDetailResponse:
+        """Course outline for its owner or an admin, including drafts."""
+        get_manageable_course(self.db, course_id, user)
+        return self.get_detail(course_id, user)
+
     def get_my_courses(self, instructor_id: int, page: int, limit: int, status_filter: Optional[str] = None) -> CourseListResponse:
         items, total = self.repo.get_paginated(page, limit, status=status_filter, instructor_id=instructor_id)
         return _course_list(items, total, page, limit)
@@ -130,33 +133,33 @@ class CourseService:
     def delete(self, course_id: int, user: User) -> None:
         course = get_manageable_course(self.db, course_id, user)
         if course.status in ("PENDING", "PUBLISHED"):
-            raise bad_request("Chỉ có thể xóa khóa học ở trạng thái Nháp hoặc Bị từ chối.")
+            raise BadRequestError("Chỉ có thể xóa khóa học ở trạng thái Nháp hoặc Bị từ chối.")
         if self.repo.has_enrollments(course_id):
-            raise bad_request("Không thể xóa khóa học đã có học viên.")
+            raise BadRequestError("Không thể xóa khóa học đã có học viên.")
         self.repo.delete(course)
 
     def submit_for_review(self, course_id: int, user: User) -> Course:
         course = get_manageable_course(self.db, course_id, user)
         if course.status not in ("DRAFT", "REJECTED"):
-            raise bad_request(f"Không thể gửi yêu cầu phê duyệt từ trạng thái '{course.status}'.")
+            raise BadRequestError(f"Không thể gửi yêu cầu phê duyệt từ trạng thái '{course.status}'.")
         if self.repo.count_lessons(course_id) < 1:
-            raise bad_request("Khóa học phải có ít nhất 1 bài học trước khi gửi phê duyệt.")
+            raise BadRequestError("Khóa học phải có ít nhất 1 bài học trước khi gửi phê duyệt.")
         return self.repo.update(course, status="PENDING")
 
     def enroll_student(self, course_id: int, user: User, student_email: str) -> Enrollment:
         """Instructor directly adds a student to the course by email."""
         course = get_manageable_course(self.db, course_id, user)
         if course.status != "PUBLISHED":
-            raise bad_request("Chỉ có thể thêm học viên vào khóa học đã xuất bản.")
+            raise BadRequestError("Chỉ có thể thêm học viên vào khóa học đã xuất bản.")
         student = UserRepository(self.db).get_by_email(student_email)
         if not student:
-            raise not_found(f"Không tìm thấy học viên với email: {student_email}")
+            raise NotFoundError(f"Không tìm thấy học viên với email: {student_email}")
         if not student.is_active:
-            raise bad_request("Tài khoản học viên đang bị khóa.")
+            raise BadRequestError("Tài khoản học viên đang bị khóa.")
         if student.id == course.instructor_id:
-            raise bad_request("Không thể thêm giảng viên phụ trách làm học viên.")
+            raise BadRequestError("Không thể thêm giảng viên phụ trách làm học viên.")
         if self.enrollment_repo.get_by_user_and_course(student.id, course_id):
-            raise bad_request("Học viên đã đăng ký khóa học này.")
+            raise BadRequestError("Học viên đã đăng ký khóa học này.")
         return self.enrollment_repo.create(user_id=student.id, course_id=course_id)
 
     def get_students(self, course_id: int, user: User) -> list[StudentProgressInfo]:
@@ -195,7 +198,7 @@ class CourseService:
     def _get_pending(self, course_id: int) -> Course:
         course = get_course_or_404(self.db, course_id)
         if course.status != "PENDING":
-            raise bad_request(f"Khóa học không ở trạng thái chờ duyệt (trạng thái hiện tại: {course.status}).")
+            raise BadRequestError(f"Khóa học không ở trạng thái chờ duyệt (trạng thái hiện tại: {course.status}).")
         return course
 
     def approve_course(self, course_id: int) -> Course:
@@ -229,7 +232,7 @@ class ChapterService:
     def delete(self, chapter_id: int, user: User) -> None:
         chapter = self._get_own_chapter(chapter_id, user)
         if self.repo.has_quizzes(chapter_id):
-            raise bad_request("Chương học đang có bài kiểm tra. Vui lòng xóa hoặc chuyển bài kiểm tra trước.")
+            raise BadRequestError("Chương học đang có bài kiểm tra. Vui lòng xóa hoặc chuyển bài kiểm tra trước.")
         course_id = chapter.course_id
         self.repo.delete(chapter)
         ProgressCalculator(self.db).recalculate_course(course_id)
@@ -237,7 +240,7 @@ class ChapterService:
     def _get_own_chapter(self, chapter_id: int, user: User) -> Chapter:
         chapter = self.repo.get_by_id(chapter_id)
         if not chapter:
-            raise not_found("Chương học không tồn tại.")
+            raise NotFoundError("Chương học không tồn tại.")
         ensure_can_manage_course(user, chapter.course, "Bạn không có quyền chỉnh sửa chương học này.")
         ensure_course_editable(chapter.course)
         return chapter
@@ -251,7 +254,7 @@ class LessonService:
     def create(self, chapter_id: int, user: User, data: LessonCreate) -> Lesson:
         chapter = ChapterRepository(self.db).get_by_id(chapter_id)
         if not chapter:
-            raise not_found("Chương học không tồn tại.")
+            raise NotFoundError("Chương học không tồn tại.")
         ensure_can_manage_course(user, chapter.course, "Bạn không có quyền thêm bài học vào chương này.")
         ensure_course_editable(chapter.course)
         lesson_data = data.model_dump()
@@ -275,7 +278,7 @@ class LessonService:
                 update_data.get("document_url", lesson.document_url),
             )
         except ValueError as exc:
-            raise bad_request(str(exc))
+            raise BadRequestError(str(exc))
         return self.repo.update(lesson, **update_data)
 
     def delete(self, lesson_id: int, user: User) -> None:
@@ -288,14 +291,14 @@ class LessonService:
         """Full lesson content (document URL presigned) for enrolled learners or course managers."""
         lesson = self.repo.get_with_course(lesson_id)
         if not lesson:
-            raise not_found("Bài học không tồn tại.")
+            raise NotFoundError("Bài học không tồn tại.")
         course = lesson.chapter.course
         if not can_manage_course(user, course):
             if course.status != "PUBLISHED":
-                raise not_found("Bài học không tồn tại.")
+                raise NotFoundError("Bài học không tồn tại.")
             enrolled = EnrollmentRepository(self.db).get_by_user_and_course(user.id, course.id) is not None
             if not (enrolled or lesson.is_free_preview):
-                raise forbidden("Bạn cần đăng ký khóa học để xem bài học này.")
+                raise ForbiddenError("Bạn cần đăng ký khóa học để xem bài học này.")
         data = _lesson_response(lesson)
         if data.document_url:
             data = data.model_copy(update={"document_url": storage_service.resolve_download_url(data.document_url)})
@@ -304,7 +307,7 @@ class LessonService:
     def _get_own_lesson(self, lesson_id: int, user: User) -> Lesson:
         lesson = self.repo.get_with_course(lesson_id)
         if not lesson:
-            raise not_found("Bài học không tồn tại.")
+            raise NotFoundError("Bài học không tồn tại.")
         course = lesson.chapter.course
         ensure_can_manage_course(user, course, "Bạn không có quyền chỉnh sửa bài học này.")
         ensure_course_editable(course)
