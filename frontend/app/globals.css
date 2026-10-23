@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens – Uniwise design system (https://claude.ai/artifact/NheQAUWoY1mym4dAfLXzDx).
+ * Cool grey-white paper, near-black ink, one ink-blue brand colour, amber reserved for
+ * progress fills, red only for errors and failed results. Stored as RGB channels so
+ * Tailwind's alpha modifiers (bg-blue/10) keep working.
+ */
+:root {
+  --paper: 243 244 242;        /* #f3f4f2 page */
+  --paper-raised: 251 251 250; /* #fbfbfa cards, inputs, player frame */
+  --paper-sunk: 230 232 229;   /* #e6e8e5 wells, progress track */
+  --line: 213 217 214;         /* #d5d9d6 hairlines */
+  --line-strong: 127 134 130;  /* #7f8682 control borders (3:1) */
+  --ink: 22 25 29;             /* #16191d text */
+  --ink-muted: 83 90 96;       /* #535a60 secondary text */
+  --blue: 36 64 107;           /* #24406b brand, primary, completed, passed */
+  --blue-soft: 223 229 239;    /* #dfe5ef tint behind blue text */
+  --on-blue: 247 248 246;      /* #f7f8f6 text on blue */
+  --amber: 176 119 20;         /* #b07714 progress fill only */
+  --amber-ink: 134 89 0;       /* #865900 amber as text */
+  --amber-soft: 246 232 200;   /* #f6e8c8 tint behind amber text */
+  --red: 178 58 42;            /* #b23a2a errors, failed, rejected */
+  --red-soft: 247 223 217;     /* #f7dfd9 tint behind red text */
+  --on-red: 251 251 250;       /* #fbfbfa text on red */
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: 19 22 25;
+    --paper-raised: 27 31 35;
+    --paper-sunk: 14 16 19;
+    --line: 43 48 54;
+    --line-strong: 104 112 121;
+    --ink: 232 234 236;
+    --ink-muted: 162 169 176;
+    --blue: 157 182 221;
+    --blue-soft: 31 42 59;
+    --on-blue: 15 26 43;
+    --amber: 224 164 58;
+    --amber-ink: 224 164 58;
+    --amber-soft: 58 44 16;
+    --red: 240 138 118;
+    --red-soft: 59 26 20;
+    --on-red: 42 15 10;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: 19 22 25;
+  --paper-raised: 27 31 35;
+  --paper-sunk: 14 16 19;
+  --line: 43 48 54;
+  --line-strong: 104 112 121;
+  --ink: 232 234 236;
+  --ink-muted: 162 169 176;
+  --blue: 157 182 221;
+  --blue-soft: 31 42 59;
+  --on-blue: 15 26 43;
+  --amber: 224 164 58;
+  --amber-ink: 224 164 58;
+  --amber-soft: 58 44 16;
+  --red: 240 138 118;
+  --red-soft: 59 26 20;
+  --on-red: 42 15 10;
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    font-size: 15px;
+    line-height: 24px;
+    font-feature-settings: "kern", "liga";
+  }
+  /* Titles that name something (course, chapter, page) are set in the serif */
+  h1, h2, h3 {
+    @apply font-serif text-ink;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  h4 {
+    @apply text-ink;
+    font-weight: 600;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  /* Focus ring: 2px paper gap, then 2px solid blue */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(var(--paper)), 0 0 0 4px rgb(var(--blue));
+  }
+  ::selection {
+    background: rgb(var(--blue) / 0.2);
+  }
+}
+
+@layer components {
+  .field-label {
+    @apply mb-2 block text-[13px] font-medium leading-[18px] text-ink;
+  }
+  /* Measured things: timecodes, percentages, scores */
+  .numeric {
+    @apply font-mono font-medium tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

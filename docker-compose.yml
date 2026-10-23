@@ -1,4 +1,4 @@
-# Deployment per SDD §7.2. The frontend service is added once ./frontend exists.
+# Deployment per SDD §7.2.
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -46,6 +46,25 @@ services:
     depends_on:
       - sqlserver
       - minio
+    restart: unless-stopped
+    networks:
+      - elearning-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked into the client bundle: the browser calls the API on the host port
+        - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    container_name: elearning-frontend
+    environment:
+      # Server-side rendering reaches the API by service name inside the network
+      - INTERNAL_API_URL=http://backend:8000/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
     restart: unless-stopped
     networks:
       - elearning-net
